@@ -1,83 +1,60 @@
-use std::process::exit;
 use rustyline::error::ReadlineError;
-use crate::Statement::Insert;
-use scan_fmt::scan_fmt;
-use scan_fmt::parse::ScanError;
+use sqlite::error::ParseError;
+use sqlite::statements::Statement::Insert;
+use sqlite::statements::{InsertStatement, Statement};
+use sqlite::table::Table;
+use std::error::Error;
+use std::process::exit;
+use sqlite::row::Row;
+use rustyline::config::Configurer;
 
 fn main() {
+  let mut table = Table::default();
   let mut rl = rustyline::Editor::<()>::new();
+  rl.load_history("history.txt").unwrap_or(());
+  rl.set_auto_add_history(true);
+  rl.set_history_ignore_dups(true);
+  rl.set_history_ignore_space(true);
+
   loop {
     let readline = rl.readline("sqlite>");
     match readline {
-      Ok(line) => repl_command(line),
-      Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => exit(0),
-      Err(_) => println!("No input"),
-    }
+      Ok(line) => {
+        repl_command(line, &mut table).unwrap_or(());
+      }
+      Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => {
+        exit(0);
+      }
+      Err(_) => {
+        println!("No input");
+      }
+    };
+    rl.save_history("history.txt").unwrap_or(());
   }
 }
 
-fn repl_command(c: String) {
+fn repl_command(c: String, table: &mut Table) -> Result<(), Box<dyn Error>> {
   if c.starts_with(".") {
-    execute_meta_command(c.trim_start_matches("."))
+    execute_meta_command(c.trim_start_matches("."));
   } else {
-    execute_statement_command(c.as_str())
+    execute_statement_command(c.as_str(), table)?;
   }
+
+  Ok(())
 }
 
 fn execute_meta_command(c: &str) {
   match c {
     "exit" => exit(0),
-    _ => println!("Unknown command {}", c)
+    _ => println!("Unknown command {}", c),
   }
 }
 
-#[derive(Debug)]
-struct Row {
-  id: usize,
-  username: String,
-  email: String,
-}
-
-#[derive(Debug)]
-struct InsertStatement {
-  row: Row
-}
-
-impl<'a> InsertStatement {
-  fn parse(args: &'a str) -> Result<InsertStatement, ParseError> {
-    let row = Self::parse_row(args)?;
-    Ok(InsertStatement { row })
-  }
-
-  fn parse_row(args: &str) -> Result<Row, ParseError> {
-    let (id, username, email) = scan_fmt!(args, "insert {} {} {}", usize, String, String)?;
-    Ok(Row { id, username, email })
-  }
-}
-
-#[derive(Debug)]
-enum Statement {
-  Insert(InsertStatement),
-  Select,
-}
-
-#[derive(Debug)]
-enum ParseError {
-  UnknownStatementType,
-  UnknownParserError(String),
-}
-
-impl From<ScanError> for ParseError {
-  fn from(e: ScanError) -> Self {
-    ParseError::UnknownParserError(e.0)
-  }
-}
-
-fn execute_statement_command(c: &str) {
+fn execute_statement_command(c: &str, table: &mut Table) -> Result<(), Box<dyn Error>> {
   let statement_result = prepare_statement(c);
   match statement_result {
-    Ok(statement) => execute_statement(statement),
-    Err(_) => println!("Unrecognized keyword at start of: {:?}", c),
+    Ok(statement) => execute_statement(statement, table),
+    Err(_) => Ok(println!("Unrecognized keyword at start of: {:?}", c)),
   }
 }
 
@@ -88,10 +65,24 @@ fn prepare_statement(s: &str) -> Result<Statement, ParseError> {
       Ok(Insert(insert_statement))
     }
     _ if s.starts_with("select") => Ok(Statement::Select),
-    _ => Err(ParseError::UnknownStatementType)
+    _ => Err(ParseError::UnknownStatementType),
   }
 }
 
-fn execute_statement(s: Statement) {
-  println!("Executed statement: {:?}", s);
+fn execute_statement(s: Statement, table: &mut Table) -> Result<(), Box<dyn Error>> {
+  match s {
+    Insert(InsertStatement { row }) => {
+      let bytes = row.serialize()?;
+      table.insert_row(bytes);
+      println!("Inserted row: {}", row);
+    }
+    Statement::Select => {
+      for bytes in table.rows() {
+        let row = Row::deserialize(bytes)?;
+        println!("{}", row);
+      }
+      println!("{} Rows", table.len());
+    }
+  };
+  Ok(())
 }
