@@ -1,45 +1,37 @@
-use bincode::ErrorKind;
 use core::fmt;
 use scan_fmt::parse::ScanError;
-use serde::export::fmt::Display;
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter};
 use std::io::Error;
 use std::string::FromUtf8Error;
 
 #[derive(Debug, PartialOrd, PartialEq)]
-pub enum ParseError {
+pub enum SqliteError {
   UnknownStatementType,
   UnknownParserError(String),
   SerializationFailedError,
 }
 
-impl From<ScanError> for ParseError {
+impl From<ScanError> for SqliteError {
   fn from(e: ScanError) -> Self {
-    ParseError::UnknownParserError(e.0)
+    SqliteError::UnknownParserError(e.0)
   }
 }
 
-impl From<Error> for ParseError {
+impl From<Error> for SqliteError {
   fn from(_e: Error) -> Self {
-    ParseError::SerializationFailedError
+    SqliteError::SerializationFailedError
   }
 }
 
-impl From<FromUtf8Error> for ParseError {
+impl From<FromUtf8Error> for SqliteError {
   fn from(_e: FromUtf8Error) -> Self {
-    ParseError::SerializationFailedError
+    SqliteError::SerializationFailedError
   }
 }
 
-impl From<Box<ErrorKind>> for ParseError {
-  fn from(_e: Box<ErrorKind>) -> Self {
-    ParseError::SerializationFailedError
-  }
-}
+impl std::error::Error for SqliteError {}
 
-impl std::error::Error for ParseError {}
-
-impl Display for ParseError {
+impl Display for SqliteError {
   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
     write!(f, "{:?}", self)
   }

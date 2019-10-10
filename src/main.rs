@@ -1,12 +1,12 @@
+use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
-use sqlite::error::ParseError;
+use sqlite::error::SqliteError;
+use sqlite::row::Row;
 use sqlite::statements::Statement::Insert;
 use sqlite::statements::{InsertStatement, Statement};
 use sqlite::table::Table;
 use std::error::Error;
 use std::process::exit;
-use sqlite::row::Row;
-use rustyline::config::Configurer;
 
 fn main() {
   let mut table = Table::default();
@@ -58,14 +58,14 @@ fn execute_statement_command(c: &str, table: &mut Table) -> Result<(), Box<dyn E
   }
 }
 
-fn prepare_statement(s: &str) -> Result<Statement, ParseError> {
+fn prepare_statement(s: &str) -> Result<Statement, SqliteError> {
   match s {
     _ if s.starts_with("insert") => {
       let insert_statement = InsertStatement::parse(s)?;
       Ok(Insert(insert_statement))
     }
     _ if s.starts_with("select") => Ok(Statement::Select),
-    _ => Err(ParseError::UnknownStatementType),
+    _ => Err(SqliteError::UnknownStatementType),
   }
 }
 
